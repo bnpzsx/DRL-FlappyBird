@@ -13,14 +13,17 @@ from agent import Agent
 from model import Model
 from replay_memory import ReplayMemory
 
-CONTEXT_LEN = 4
+CONTEXT_LEN = 3
 IMAGE_SIZE = (80, 80)
-MEMORY_SIZE = int(1e4)
+MEMORY_SIZE = int(5e3)
 MEMORY_WARMUP_SIZE = MEMORY_SIZE // 20
 BATCH_SIZE = 64
 UPDATE_FREQ = 5
 GAMMA = 0.99
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-3
+
+train_total_steps = int(1e5)
+test_every_steps = 2000
 
 def preprocess(image):
     image = cv2.resize(image, IMAGE_SIZE)
@@ -105,34 +108,31 @@ def main():
         e_greed_decrement=1e-6)
 
     # 加载模型
-    save_path = './dqn_model.ckpt'
-    agent.restore(save_path)
+    #save_path = './dqn_model.ckpt'
+    #agent.restore(save_path)
 
     with tqdm(total=MEMORY_WARMUP_SIZE, desc='[Replay Memory Warm Up]') as pbar:
         while len(rpm) < MEMORY_WARMUP_SIZE:
             total_reward, steps, _ = run_train_episode(env, agent, rpm)
             pbar.update(steps)
 
-
-    max_episode = 2000
-    test_every_episode = 50
     # train
     best_reward = -5
-    pbar = tqdm(total=max_episode)
+    pbar = tqdm(total=train_total_steps)
     test_flag = 0
-    episodes = 0
-    while episodes < max_episode:
+    total_steps = 0
+    while total_steps < train_total_steps:
         # start epoch
         total_reward, steps, loss = run_train_episode(env, agent, rpm)
-        episodes += 1
+        total_steps += steps
         pbar.set_description('[train]exploration:{}'.format(agent.e_greed))
-        summary.add_scalar('dqn/score', total_reward, episodes)
-        summary.add_scalar('dqn/loss', loss, episodes)  # mean of total loss
-        summary.add_scalar('dqn/exploration', agent.e_greed, episodes)
-        pbar.update()
+        summary.add_scalar('dqn/score', total_reward, total_steps)
+        summary.add_scalar('dqn/loss', loss, total_steps)  # mean of total loss
+        summary.add_scalar('dqn/exploration', agent.e_greed, total_steps)
+        pbar.update(steps)
 
-        if episodes // test_every_episode >= test_flag:
-            while episodes // test_every_episode >= test_flag:
+        if total_steps // test_every_steps >= test_flag:
+            while total_steps // test_every_steps >= test_flag:
                 test_flag += 1
             pbar.write("testing")
             eval_rewards = []
@@ -141,9 +141,9 @@ def main():
                 eval_rewards.append(eval_reward)
             logger.info(
                 "eval_agent done, (steps, eval_reward): ({}, {})".format(
-                    episodes, np.mean(eval_rewards)))
+                    total_steps, np.mean(eval_rewards)))
             eval_test = np.mean(eval_rewards)
-            summary.add_scalar('dqn/eval', eval_test, episodes)
+            summary.add_scalar('dqn/eval', eval_test, total_steps)
             if eval_test > best_reward:
                 agent.save('./best_dqn_model.ckpt')
                 best_reward = eval_test
