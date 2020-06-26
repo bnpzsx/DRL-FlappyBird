@@ -3,7 +3,7 @@ import paddle.fluid as fluid
 import parl
 from parl import layers
 
-CONTEXT_LEN = 3
+CONTEXT_LEN = 4
 IMAGE_SIZE = (CONTEXT_LEN, 80, 80)
 
 class Agent(parl.Agent):

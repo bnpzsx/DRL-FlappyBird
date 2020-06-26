@@ -13,9 +13,10 @@ from agent import Agent
 from model import Model
 from replay_memory import ReplayMemory
 
-CONTEXT_LEN = 3
+CONTEXT_LEN = 4
+FRAME_SKIP = 4
 IMAGE_SIZE = (80, 80)
-MEMORY_SIZE = int(5e3)
+MEMORY_SIZE = int(1e4)
 MEMORY_WARMUP_SIZE = MEMORY_SIZE // 20
 BATCH_SIZE = 64
 UPDATE_FREQ = 5
@@ -33,29 +34,30 @@ def preprocess(image):
     return image / 255
 
 def env_reset(env, action=0):
-    obs = [preprocess(env.reset())]
+    global recent_obs
+    recent_obs = [preprocess(env.reset())]
     for i in range(CONTEXT_LEN - 1):
         next_obs, _, _, _ = env.step(action)
-        obs.append(preprocess(next_obs))
+        recent_obs.append(preprocess(next_obs))
+    obs = recent_obs[-CONTEXT_LEN:]
     return np.concatenate(obs)
     
 def env_steps(env, action=0):
-    obs = []
+    global recent_obs
     total_reward = 0
-    for i in range(CONTEXT_LEN):
+    for i in range(FRAME_SKIP):
         next_obs, reward, isOver, _ = env.step(action)
         total_reward += reward
-        obs.append(preprocess(next_obs))
+        recent_obs.append(preprocess(next_obs))
         if isOver:
             break
-    while len(obs) < CONTEXT_LEN:
-        obs.append(obs[-1])
+    obs = recent_obs[-CONTEXT_LEN:]
     return np.concatenate(obs), total_reward, isOver, _
 
 def run_train_episode(env, agent, rpm):
     total_reward = 0
     all_cost = []
-    obs = env_reset(env)
+    obs = env_reset(env, env.action_space.sample())
     steps = 0
     while True:
         steps += 1
