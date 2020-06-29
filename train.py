@@ -1,3 +1,5 @@
+from collections import deque
+
 import cv2
 import gym
 import gym_ple
@@ -22,6 +24,8 @@ BATCH_SIZE = 64
 UPDATE_FREQ = 5
 GAMMA = 0.99
 LEARNING_RATE = 1e-3
+E_GREED = 0.3
+E_GREED_DECREMENT = 3e-6
 
 train_total_steps = int(1e5)
 test_every_steps = 2000
@@ -29,19 +33,19 @@ test_every_steps = 2000
 def preprocess(image):
     image = cv2.resize(image, IMAGE_SIZE)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    #_, image = cv2.threshold(image, 150, 255, cv2.THRESH_BINARY)
     image = np.expand_dims(image, axis=0)
     return image / 255
 
 def env_reset(env, action=0):
     global recent_obs
-    recent_obs = [preprocess(env.reset())]
+    recent_obs = deque(maxlen=CONTEXT_LEN)
+    recent_obs.append(preprocess(env.reset()))
     for i in range(CONTEXT_LEN - 1):
         next_obs, _, _, _ = env.step(action)
         recent_obs.append(preprocess(next_obs))
-    obs = recent_obs[-CONTEXT_LEN:]
+    obs = list(recent_obs)
     return np.concatenate(obs)
-    
+
 def env_steps(env, action=0):
     global recent_obs
     total_reward = 0
@@ -51,7 +55,7 @@ def env_steps(env, action=0):
         recent_obs.append(preprocess(next_obs))
         if isOver:
             break
-    obs = recent_obs[-CONTEXT_LEN:]
+    obs = list(recent_obs)
     return np.concatenate(obs), total_reward, isOver, _
 
 def run_train_episode(env, agent, rpm):
@@ -103,11 +107,10 @@ def main():
 
     model = Model(act_dim)
     algorithm = DQN(model, act_dim=act_dim, gamma=GAMMA, lr=LEARNING_RATE)
-    agent = Agent(
-        algorithm,
-        act_dim=act_dim,
-        e_greed=0.1,  # 有一定概率随机选取动作，探索
-        e_greed_decrement=1e-6)
+    agent = Agent(algorithm,
+                  act_dim=act_dim,
+                  e_greed=E_GREED,
+                  e_greed_decrement=E_GREED_DECREMENT)
 
     # 加载模型
     #save_path = './dqn_model.ckpt'
