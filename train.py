@@ -1,4 +1,5 @@
 from collections import deque
+from time import sleep
 
 import cv2
 import gym
@@ -36,27 +37,33 @@ def preprocess(image):
     image = np.expand_dims(image, axis=0)
     return image / 255
 
-def env_reset(env, action=0):
+def env_reset(env, action=0, render=False):
     global recent_obs
     recent_obs = deque(maxlen=CONTEXT_LEN)
     recent_obs.append(preprocess(env.reset()))
     for i in range(CONTEXT_LEN - 1):
         next_obs, _, _, _ = env.step(action)
         recent_obs.append(preprocess(next_obs))
+        if render:
+            env.render()
+            sleep(0.03)
     obs = list(recent_obs)
     return np.concatenate(obs)
 
-def env_steps(env, action=0):
+def env_steps(env, action=0, render=False):
     global recent_obs
     total_reward = 0
     for i in range(FRAME_SKIP):
-        next_obs, reward, isOver, _ = env.step(action)
+        next_obs, reward, isOver, info = env.step(action)
         total_reward += reward
         recent_obs.append(preprocess(next_obs))
+        if render:
+            env.render()
+            sleep(0.03)
         if isOver:
             break
     obs = list(recent_obs)
-    return np.concatenate(obs), total_reward, isOver, _
+    return np.concatenate(obs), total_reward, isOver, info
 
 def run_train_episode(env, agent, rpm):
     total_reward = 0
